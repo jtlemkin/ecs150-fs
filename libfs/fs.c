@@ -32,27 +32,12 @@ struct __attribute__((__packed__)) root_dir {
 	uint8_t padding[10];
 };
 
-struct superblock superblock;
-struct fat* fat = NULL;
-struct root_dir root_dir;
+struct superblock *superblock = NULL;
+struct fat *fat = NULL;
+struct root_dir *root_dir = NULL;
 
-bool is_valid_superblock(struct superblock *superblock) {
+void print_signature(struct superblock *superblock) {
 	int i;
-
-	// ecs150fs is the hexadecimal representation of the string "ECS150FS"
-	uint8_t ecs150fs[8] = {'E', 'C', 'S', '1', '5', '0', 'F', 'S'};
-
-	for (i = 0; i < 8; i++) {
-		if ((superblock->signature)[i] != ecs150fs[i]) {
-			return false;
-		}
-	}
-
-	return true;
-}
-
-void print_signature(struct superblock * superblock) {
-	int i = 0;
 
 	for (i = 0; i < 8; i++) {
 		printf("%c", superblock->signature[i]);
@@ -61,8 +46,23 @@ void print_signature(struct superblock * superblock) {
 	printf("\n");
 }
 
+bool is_valid_superblock(struct superblock *superblock) {
+	int i;
+
+	// ecs150fs is the hexadecimal representation of the string "ECS150FS"
+	uint8_t target[8] = {'E', 'C', 'S', '1', '5', '0', 'F', 'S'};
+
+	for (i = 0; i < 8; i++) {
+		if ((superblock->signature)[i] != target[i]) {
+			return false;
+		}
+	}
+
+	return true;
+}
+
 bool is_disk_opened() {
-	return fat != NULL;
+	return superblock != NULL;
 }
 
 int fs_mount(const char *diskname)
@@ -74,26 +74,35 @@ int fs_mount(const char *diskname)
 	}
 
 	// Read in superblock
-	block_read(0, &superblock);
-	if (!is_valid_superblock(&superblock)) {
+	superblock = (struct superblock*)malloc(sizeof(struct superblock));
+	if (!superblock) {
+		perror("fs_mount superblock: ");
+		return -1;
+	}
+	block_read(0, superblock);
+	if (!is_valid_superblock(superblock)) {
 		printf("Error reading superblock with signature: ");
-		//print_signature(&superblock);
+		print_signature(superblock);
 		return -1;
 	}
 
 	// Read in fat
 	fat = (struct fat*)malloc(sizeof(struct fat));
 	if (!fat) {
-		perror("fs_mount: ");
+		perror("fs_mount fat: ");
 		return -1;
 	}
-
-	for (i = 0; i < superblock.num_fat; ++i) {
-		block_read(1 + i, fat + i);
+	for (i = 0; i < superblock->num_fat; ++i) {
+		block_read(1 + i, fat->entries + i);
 	}
 
 	// Read in root_dir
-	block_read(superblock.num_fat + 2, &root_dir);
+	root_dir = (struct root_dir*)malloc(sizeof(struct root_dir));
+	if (!root_dir) {
+		perror("fs_mount root_dir: ");
+		return -1;
+	}
+	block_read(superblock->num_fat + 2, root_dir);
 
 	return 0;
 }
@@ -101,12 +110,14 @@ int fs_mount(const char *diskname)
 int fs_umount(void)
 {
 	// TODO: save edits
-
 	free(fat);
 	fat = NULL;
 
-	memset(&superblock, 0, sizeof(struct superblock));
-	memset(&root_dir, 0, sizeof(struct root_dir));
+	free(superblock);
+	superblock = NULL;
+
+	free(root_dir);
+	root_dir = NULL;
 
 	if (block_disk_close() == -1) {
 		return -1;
@@ -122,10 +133,10 @@ int fs_info(void)
 	}
 
 	printf("Signature: ");
-	//print_signature(&superblock);
-	printf("Num blocks on disk: %" PRIu16 "\n", superblock.num_blocks_disk);
-	printf("Num data blocks: %" PRIu16 "\n", superblock.num_data);
-	printf("Num fat %" PRIu8 "\n", superblock.num_fat);
+	print_signature(superblock);
+	printf("Num blocks on disk: %" PRIu16 "\n", superblock->num_blocks_disk);
+	printf("Num data blocks: %" PRIu16 "\n", superblock->num_data);
+	printf("Num fat %" PRIu8 "\n", superblock->num_fat);
 
 	return 0;
 }
