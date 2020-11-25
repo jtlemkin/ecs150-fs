@@ -43,7 +43,7 @@ bool is_valid_superblock(struct superblock *superblock) {
 	uint8_t ecs150fs[8] = {'E', 'C', 'S', '1', '5', '0', 'F', 'S'};
 
 	for (i = 0; i < 8; i++) {
-		if ((superblock->signature)[i] != ecs150fs[i]) {
+		if (superblock->signature[i] != ecs150fs[i]) {
 			return false;
 		}
 	}
