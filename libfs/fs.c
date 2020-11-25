@@ -102,7 +102,7 @@ int fs_mount(const char *diskname)
 		perror("fs_mount root_dir: ");
 		return -1;
 	}
-	block_read(superblock->num_fat + 2, root_dir);
+	block_read(superblock->num_fat + 1, root_dir); // Crash on this line
 
 	return 0;
 }
