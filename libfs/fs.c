@@ -11,8 +11,8 @@
 
 #define FAT_EOC 65535
 
-// The failable macro propogates a subfunctions failure to the calling function
-#define failable(result)						\
+// The FAILABLE macro propogates a subfunctions failure to the calling function
+#define FAILABLE(result)						\
 do {											\
 	if (result == -1) { 						\
 		perror(#result); 						\
@@ -85,7 +85,7 @@ int superblock_read() {
 		return -1;
 	}
 
-	failable(block_read(0, superblock));
+	FAILABLE(block_read(0, superblock));
 	if (!is_valid_superblock(superblock)) {
 		printf("Error reading superblock with signature: ");
 		print_signature(superblock);
@@ -104,7 +104,7 @@ int fat_read() {
 		return -1;
 	}
 	for (i = 0; i < superblock->num_fat; ++i) {
-		failable(block_read(1 + i, fat + i));
+		FAILABLE(block_read(1 + i, fat + i));
 	}
 
 	return 0;
@@ -116,17 +116,17 @@ int root_dir_read() {
 		perror("fs_mount root_dir: ");
 		return -1;
 	}
-	failable(block_read(superblock->num_fat + 1, root_dir));
+	FAILABLE(block_read(superblock->num_fat + 1, root_dir));
 
 	return 0;
 }
 
 int fs_mount(const char *diskname)
 {
-	failable(block_disk_open(diskname));
-	failable(superblock_read());
-	failable(fat_read());
-	failable(root_dir_read());
+	FAILABLE(block_disk_open(diskname));
+	FAILABLE(superblock_read());
+	FAILABLE(fat_read());
+	FAILABLE(root_dir_read());
 
 	return 0;
 }
@@ -143,7 +143,7 @@ int fs_umount(void)
 	free(root_dir);
 	root_dir = NULL;
 
-	failable(block_disk_close());
+	FAILABLE(block_disk_close());
 
 	return 0;
 }
