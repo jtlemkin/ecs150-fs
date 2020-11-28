@@ -11,6 +11,15 @@
 
 #define FAT_EOC 65535
 
+// The failable macro propogates a subfunctions failure to the calling function
+#define failable(result)						\
+do {											\
+	if (result == -1) { 						\
+		perror(#result); 						\
+		return -1;								\
+	}											\
+} while(0)
+
 struct __attribute__((__packed__)) superblock {
 	uint8_t signature[8];
 	uint16_t num_blocks_disk;
@@ -37,7 +46,7 @@ struct __attribute__((__packed__)) root_dir {
 };
 
 struct superblock *superblock = NULL;
-struct fat **fat = NULL;
+struct fat *fat = NULL;
 struct root_dir *root_dir = NULL;
 
 void print_signature(struct superblock *superblock) {
@@ -69,50 +78,55 @@ bool is_disk_opened() {
 	return superblock != NULL;
 }
 
-int fs_mount(const char *diskname)
-{
-	int i;
-
-	if (block_disk_open(diskname) == -1) {
-		return -1;
-	}
-
-	// Read in superblock
+int superblock_read() {
 	superblock = (struct superblock*)malloc(sizeof(struct superblock));
 	if (!superblock) {
 		perror("fs_mount superblock: ");
 		return -1;
 	}
-	block_read(0, superblock);
+
+	failable(block_read(0, superblock));
 	if (!is_valid_superblock(superblock)) {
 		printf("Error reading superblock with signature: ");
 		print_signature(superblock);
 		return -1;
 	}
 
-	printf("Superblock\n");
+	return 0;
+}
 
-	// Read in fat
+int fat_read() {
+	int i;
+
 	fat = (struct fat*)malloc(superblock->num_fat * sizeof(struct fat));
 	if (!fat) {
-		perror("fs_mount fat: ");
+		perror("fs_mount fat array: ");
 		return -1;
 	}
 	for (i = 0; i < superblock->num_fat; ++i) {
-		block_read(1 + i, fat->entries + i);
+		failable(block_read(1 + i, fat + i));
 	}
 
-	printf("Fat\n");
+	return 0;
+}
 
-	// Read in root_dir
+int root_dir_read() {
 	root_dir = (struct root_dir*)malloc(sizeof(struct root_dir));
 	if (!root_dir) {
 		perror("fs_mount root_dir: ");
 		return -1;
 	}
-	block_read(superblock->num_fat + 1, root_dir); // Crash on this line
+	failable(block_read(superblock->num_fat + 1, root_dir));
 
-	printf("Root dir %p\n", root_dir);
+	return 0;
+}
+
+int fs_mount(const char *diskname)
+{
+	failable(block_disk_open(diskname));
+	failable(superblock_read());
+	failable(fat_read());
+	failable(root_dir_read());
 
 	return 0;
 }
@@ -129,9 +143,7 @@ int fs_umount(void)
 	free(root_dir);
 	root_dir = NULL;
 
-	if (block_disk_close() == -1) {
-		return -1;
-	}
+	failable(block_disk_close());
 
 	return 0;
 }
