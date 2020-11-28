@@ -164,7 +164,7 @@ int fs_info(void)
 	return 0;
 }
 
-int first_free_index() {
+int first_free_fat_index() {
 	int i, j;
 
 	for (i = 0; i < superblock->num_fat; ++i) {
@@ -180,17 +180,17 @@ int first_free_index() {
 
 // Checks to see if root directory has a file with the same name already
 // Additionally it also finds the first free index for a file
-bool is_filename_unique(const char* filename, size_t *first_free_index) {
+bool is_filename_unique(const char* filename, size_t *first_free_fat_index) {
 	int i;
 	bool first_found = false;
 
 	for (i = 0; i < FS_FILE_MAX_COUNT; ++i) {
 		if (!first_found && root_dir->entries[i].fname[0] == '\0') {
-			*first_free_index = i;
+			*first_free_fat_index = i;
 			first_found = true;
 		}
 
-		if (strcmp(root_dir->entries[i].fname, filename) == 0) {
+		if (strcmp((const char*) root_dir->entries[i].fname, filename) == 0) {
 			return false;
 		}
 	}
@@ -203,7 +203,7 @@ int first_index_of_filename(const char* filename) {
 	int i;
 
 	for (i = 0; i < FS_FILE_MAX_COUNT; ++i) {
-		if (strcmp(root_dir->entries[i].fname, filename) == 0) {
+		if (strcmp((const char*) root_dir->entries[i].fname, filename) == 0) {
 			return i;
 		}
 	}
@@ -212,34 +212,48 @@ int first_index_of_filename(const char* filename) {
 }
 
 void create_file(const char *filename, int index) {
-	strcpy(root_dir->entries[index].fname, filename);
+	strcpy((char * restrict) root_dir->entries[index].fname, filename);
 	root_dir->entries[index].fsize = 0;
 	root_dir->entries[index].first_block_i = FAT_EOC;
 }
 
+void fs_backup() {
+	int i = 1;
+
+	for (i = 0; i < superblock->num_fat; i++) {
+		block_write(1 + i, fat + i);
+	}
+
+	block_write(superblock->num_fat + 1, root_dir);
+}
+
 int fs_create(const char *filename)
 {
-	int file_index;
+	size_t file_index;
 
 	if (!is_filename_unique(filename, &file_index)) {
+		fprintf(stderr, "Error creating file: file name not unique\n");
 		return -1;
 	}
 
-	int fat_i = first_free_index();
+	int fat_i = first_free_fat_index();
 	if (fat_i == -1) {
+		fprintf(stderr, "Error creating file: no space in fat\n");
 		return -1;
 	}
 
 	create_file(filename, file_index);
+
+	fs_backup();
 	
-	return -1;
+	return 0;
 }
 
 uint16_t* fat_entry_at_index(int index) {
 	int fat_index = index / FAT_SIZE;
 	int entry_index = index % FAT_SIZE;
 
-	return fat[fat_index] + entry_index;
+	return fat[fat_index].entries + entry_index;
 }
 
 void clear_blocks(struct file_entry *file) {
@@ -249,30 +263,54 @@ void clear_blocks(struct file_entry *file) {
 	while (data_index != FAT_EOC) {
 		block_write(data_index, empty_buffer);
 		data_index = fat->entries[data_index];
-		fat->entries[data_index] = 0;
+		*fat_entry_at_index(data_index) = 0;
 	}
 
 	free(empty_buffer);
 }
+
+//int fs_ls(void);
 
 int fs_delete(const char *filename)
 {
 	// TODO Phase 3 check to see if file is open
 	int file_index = first_index_of_filename(filename);
 
-	clear_blocks(&(root_dir->entries[file_index]));
+	//fs_ls();
+
+	if (file_index == -1) {
+		fprintf(stderr, "Unable to find file in file root directory\n");
+		return -1;
+	}
+
+	//printf("findex %d\n", file_index);
+
+	clear_blocks(root_dir->entries + file_index);
 
 	memset(root_dir->entries + file_index, 0, sizeof(struct file_entry));
 
-	block_write(superblock->num_fat + 1, root_dir);
+	fs_backup();
 
-	return -1;
+	return ;
 }
 
 int fs_ls(void)
 {
-	/* TODO: Phase 2 */
-	return -1;
+	int i;
+	struct file_entry entry;
+
+	if (!is_disk_opened()) {
+		fprintf(stderr, "fs not opened\n");
+		return -1;
+	}
+
+	for (i = 0; i < FS_FILE_MAX_COUNT; i++) {
+		entry = root_dir->entries[i];
+		if (entry.fname[0] != '\0') {
+			printf("%s %d bytes\n", entry.fname, entry.fsize);
+		}
+	}
+	return 0;
 }
 
 int fs_open(const char *filename)
