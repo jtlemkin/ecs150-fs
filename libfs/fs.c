@@ -25,15 +25,19 @@ struct __attribute__((__packed__)) fat {
 	uint16_t entries[2048];
 };
 
-struct __attribute__((__packed__)) root_dir {
-	uint8_t fname[16];
+struct __attribute__((__packed__)) file_entry {
+	uint8_t fname[FS_FILENAME_LEN];
 	uint32_t fsize;
 	uint16_t first_block_i;
 	uint8_t padding[10];
 };
 
+struct __attribute__((__packed__)) root_dir {
+	struct file_entry entries[FS_FILE_MAX_COUNT];
+};
+
 struct superblock *superblock = NULL;
-struct fat *fat = NULL;
+struct fat **fat = NULL;
 struct root_dir *root_dir = NULL;
 
 void print_signature(struct superblock *superblock) {
@@ -86,8 +90,10 @@ int fs_mount(const char *diskname)
 		return -1;
 	}
 
+	printf("Superblock\n");
+
 	// Read in fat
-	fat = (struct fat*)malloc(sizeof(struct fat));
+	fat = (struct fat*)malloc(superblock->num_fat * sizeof(struct fat));
 	if (!fat) {
 		perror("fs_mount fat: ");
 		return -1;
@@ -96,6 +102,8 @@ int fs_mount(const char *diskname)
 		block_read(1 + i, fat->entries + i);
 	}
 
+	printf("Fat\n");
+
 	// Read in root_dir
 	root_dir = (struct root_dir*)malloc(sizeof(struct root_dir));
 	if (!root_dir) {
@@ -103,6 +111,8 @@ int fs_mount(const char *diskname)
 		return -1;
 	}
 	block_read(superblock->num_fat + 1, root_dir); // Crash on this line
+
+	printf("Root dir %p\n", root_dir);
 
 	return 0;
 }
