@@ -436,6 +436,7 @@ int fs_read(int fd, void *buf, size_t count)
    uint8_t *bounce_buffer = (uint8_t*)calloc(BLOCK_SIZE, sizeof(uint8_t));
 
    int blocksIteratedOver = 0;
+   int bytesWrittenOffset = 0;
    while (data_index != FAT_EOC) {
         //block_write(data_index, empty_buffer);
         int byteLowerBound = blocksIteratedOver * BLOCK_SIZE;
@@ -443,21 +444,34 @@ int fs_read(int fd, void *buf, size_t count)
 
         if (startingByte <= byteLowerBound && finalByte >= byteUpperBound) {
             // We want to read in this whole block. Read it in and then move to the next if statement cycle.
+
+            FAILABLE(block_read(data_index, buf+bytesWrittenOffset));
+            bytesWrittenOffset += BLOCK_SIZE;
 			
         } else if (startingByte >= byteLowerBound && startingByte <= byteUpperBound && finalByte >= byteLowerBound && finalByte <= byteUpperBound){
            // The START and END of the data we want is contained in this block.
            FAILABLE(block_read(data_index, bounce_buffer));
            int startPoint = startingByte - byteLowerBound;
            memcpy(buf, bounce_buffer + startPoint, count);
+           break;
 
            // read from the starting byte to the ending byte via a bounce buffer
        	} else if (startingByte >= byteLowerBound && startingByte <= byteUpperBound){
           // The start of the data we want is contained in this block.
 
+            FAILABLE(block_read(data_index, bounce_buffer));
+            int startPoint = startingByte - byteLowerBound;
+            memcpy(buf, bounce_buffer + startPoint, BLOCK_SIZE-startingByte);
+            bytesWrittenOffset += BLOCK_SIZE-startingByte;
+
           // Read from the starting byte to the end of this block (byteUpperBound) via a bounce buffer.
         } else if (finalByte >= byteLowerBound && finalByte <= byteUpperBound){
            // The end of the data we want is contained in this block.
 
+            FAILABLE(block_read(data_index, bounce_buffer));
+            int startPoint = startingByte - byteLowerBound;
+            memcpy(buf+bytesWrittenOffset, bounce_buffer, finalByte-byteLowerBound);
+            break;
            // read from the byteLowerBound to the final byte in this block via a bounce buffer.
         } else {
             // No data we care about is contained in this block. Proceed
