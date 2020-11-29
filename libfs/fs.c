@@ -46,9 +46,15 @@ struct __attribute__((__packed__)) root_dir {
 	struct file_entry entries[FS_FILE_MAX_COUNT];
 };
 
+struct fd_entry {
+	int file_i;
+	size_t offset;
+};
+
 struct superblock *superblock = NULL;
 struct fat_block *fat = NULL;
 struct root_dir *root_dir = NULL;
+struct fd_entry fd_table[FS_OPEN_MAX_COUNT];
 
 void print_signature(struct superblock *superblock) {
 	int i;
@@ -122,12 +128,21 @@ int root_dir_read() {
 	return 0;
 }
 
+void fd_table_create() {
+	int i;
+	for (i = 0; i < FS_OPEN_MAX_COUNT; ++i) {
+		fd_table[i].file_i = -1;
+	}
+}
+
 int fs_mount(const char *diskname)
 {
 	FAILABLE(block_disk_open(diskname));
 	FAILABLE(superblock_read());
 	FAILABLE(fat_read());
 	FAILABLE(root_dir_read());
+
+	fd_table_create();
 
 	return 0;
 }
@@ -291,7 +306,7 @@ int fs_delete(const char *filename)
 
 	fs_backup();
 
-	return ;
+	return 0;
 }
 
 int fs_ls(void)
@@ -313,28 +328,83 @@ int fs_ls(void)
 	return 0;
 }
 
+// Returns -1 if max number of files are open
+int first_open_fd_i() {
+	int i;
+	for (i = 0; i < FS_OPEN_MAX_COUNT; ++i) {
+		if (fd_table[i].file_i == -1) {
+			return i;
+		}
+	}
+	return -1;
+}
+
 int fs_open(const char *filename)
 {
-	/* TODO: Phase 3 */
-	return -1;
+	int fd = first_open_fd_i();
+	if (fd == -1) {
+		fprintf(stderr, "Unable to open file: max num files opened\n");
+		return -1;
+	}
+
+	int file_i = first_index_of_filename(filename);
+	if (file_i == -1) {
+		fprintf(stderr, "Unable to open file: file not found\n");
+	}
+
+	fd_table[fd].file_i = file_i;
+	fd_table[fd].offset = 0;
+
+	return fd;
 }
 
 int fs_close(int fd)
 {
-	/* TODO: Phase 3 */
-	return -1;
+	if (fd < 0 || fd > 31) {
+		fprintf(stderr, "Unable to close fd: out of bounds\n");
+		return -1;
+	}
+
+	if (fd_table[fd].file_i == -1) {
+		fprintf(stderr, "Unable to close fd: file not open\n");
+		return -1;
+	}
+
+	fd_table[fd].file_i = -1;
+
+	return 0;
 }
 
 int fs_stat(int fd)
 {
-	/* TODO: Phase 3 */
-	return -1;
+	if (fd < 0 || fd > 31) {
+		fprintf(stderr, "Unable to read size of fd: fd out of bounds\n");
+		return -1;
+	}
+
+	if (fd_table[fd].file_i == -1) {
+		fprintf(stderr, "Unable to read size of fd: file not open\n");
+		return -1;
+	}
+
+	return root_dir->entries[fd_table[fd].file_i].fsize;
 }
 
 int fs_lseek(int fd, size_t offset)
 {
-	/* TODO: Phase 3 */
-	return -1;
+	if (fd < 0 || fd > 31) {
+		fprintf(stderr, "Unable to lseek: fd out of bounds\n");
+		return -1;
+	}
+
+	if (fd_table[fd].file_i == -1) {
+		fprintf(stderr, "Unable to lseek: file not open\n");
+		return -1;
+	}
+
+	fd_table[fd].offset = offset;
+	
+	return 0;
 }
 
 int fs_write(int fd, void *buf, size_t count)
