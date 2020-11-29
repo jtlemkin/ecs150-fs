@@ -193,24 +193,22 @@ int first_free_fat_index() {
 	return -1;
 }
 
-// Checks to see if root directory has a file with the same name already
-// Additionally it also finds the first free index for a file
-bool is_filename_unique(const char* filename, size_t *first_free_fat_index) {
+// Returns -1 if filename already in root_dir
+int new_file_index(const char* filename) {
 	int i;
-	bool first_found = false;
+	int file_index = -1;
 
 	for (i = 0; i < FS_FILE_MAX_COUNT; ++i) {
-		if (!first_found && root_dir->entries[i].fname[0] == '\0') {
-			*first_free_fat_index = i;
-			first_found = true;
+		if (strcmp((const char*) root_dir->entries[i].fname, filename) == 0) {
+			return -1;
 		}
 
-		if (strcmp((const char*) root_dir->entries[i].fname, filename) == 0) {
-			return false;
+		if (file_index == -1 && root_dir->entries[i].fname[0] == '\0') {
+			file_index = i;
 		}
 	}
 
-	return true;
+	return file_index;
 }
 
 // Returns -1 if file not found
@@ -244,9 +242,8 @@ void fs_backup() {
 
 int fs_create(const char *filename)
 {
-	size_t file_index;
-
-	if (!is_filename_unique(filename, &file_index)) {
+	size_t file_index = new_file_index(filename);
+	if (file_index == -1) {
 		fprintf(stderr, "Error creating file: file name not unique\n");
 		return -1;
 	}
