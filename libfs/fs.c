@@ -430,37 +430,32 @@ int fs_read(int fd, void *buf, size_t count)
 
    int data_index = root_dir->entries[fd_table[fd].file_i].first_block_i;
 
-   int startingByte = startingOffset;
-   int finalByte = startingOffset + count - 1;
+   int startingByte = fd_table[fd].offset;
+   int finalByte = startingByte + count - 1;
+
+   uint8_t *bounce_buffer = (uint8_t*)calloc(BLOCK_SIZE, sizeof(uint8_t));
 
    int blocksIteratedOver = 0;
    while (data_index != FAT_EOC) {
-
         //block_write(data_index, empty_buffer);
         int byteLowerBound = blocksIteratedOver * BLOCK_SIZE;
-        int byteUpperBound = (blocksIteratedOver + 1) * BLOCK_SIZE) - 1;
+        int byteUpperBound = ((blocksIteratedOver + 1) * BLOCK_SIZE) - 1;
 
-        if (startingByte <= byteLowerBound && finalByte >= byteUpperBound){
+        if (startingByte <= byteLowerBound && finalByte >= byteUpperBound) {
             // We want to read in this whole block. Read it in and then move to the next if statement cycle.
-
-        }
-
-       if (startingByte >= byteLowerBound && startingByte <= byteUpperBound && finalByte >= byteLowerBound && finalByte <= byteUpperBound){
+			
+        } else if (startingByte >= byteLowerBound && startingByte <= byteUpperBound && finalByte >= byteLowerBound && finalByte <= byteUpperBound){
            // The START and END of the data we want is contained in this block.
-
-           uint8_t *empty_buffer = (uint8_t*)calloc(BLOCK_SIZE, sizeof(uint8_t));
-           FAILABLE(block_read(data_index, empty_buffer));
+           FAILABLE(block_read(data_index, bounce_buffer));
            int startPoint = startingByte - byteLowerBound;
-           memcpy(buffer, empty_buffer + startpoint, count);
+           memcpy(buf, bounce_buffer + startPoint, count);
 
            // read from the starting byte to the ending byte via a bounce buffer
-       }
-        if (startingByte >= byteLowerBound && startingByte <= byteUpperBound){
+       	} else if (startingByte >= byteLowerBound && startingByte <= byteUpperBound){
           // The start of the data we want is contained in this block.
 
           // Read from the starting byte to the end of this block (byteUpperBound) via a bounce buffer.
-        }
-        if (finalByte >= byteLowerBound && finalByte <= byteUpperBound){
+        } else if (finalByte >= byteLowerBound && finalByte <= byteUpperBound){
            // The end of the data we want is contained in this block.
 
            // read from the byteLowerBound to the final byte in this block via a bounce buffer.
@@ -472,7 +467,7 @@ int fs_read(int fd, void *buf, size_t count)
         blocksIteratedOver++;
    }
 
-    free(empty_buffer);
+    free(bounce_buffer);
 
 	return -1;
 }
