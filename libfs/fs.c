@@ -274,7 +274,7 @@ void clear_blocks(struct file_entry *file) {
 
 	while (data_index != FAT_EOC) {
 		block_write(data_index, empty_buffer);
-		data_index = fat->entries[data_index];
+		data_index = *fat_entry_at_index(data_index);
 		*fat_entry_at_index(data_index) = 0;
 	}
 
@@ -413,6 +413,67 @@ int fs_write(int fd, void *buf, size_t count)
 int fs_read(int fd, void *buf, size_t count)
 {
 	/* TODO: Phase 4 */
+
+   /* uint32_t fileSize = root_dir->entries[fd_table[fd].file_i].fsize; // The size of the file we want to access.
+    uint16_t firstBlockIndex = root_dir->entries[fd_table[fd].file_i].first_block_i;
+    size_t startingOffset = fd_table[fd].offset;
+
+    for (int i = 0; i < num_fat*)
+
+    if (startingOffset + count >= BLOCK_SIZE){
+
+    }
+
+
+*/
+   // uint8_t *empty_buffer = (uint8_t*)calloc(BLOCK_SIZE, sizeof(uint8_t));
+
+   int data_index = root_dir->entries[fd_table[fd].file_i].first_block_i;
+
+   int startingByte = startingOffset;
+   int finalByte = startingOffset + count - 1;
+
+   int blocksIteratedOver = 0;
+   while (data_index != FAT_EOC) {
+
+        //block_write(data_index, empty_buffer);
+        int byteLowerBound = blocksIteratedOver * BLOCK_SIZE;
+        int byteUpperBound = (blocksIteratedOver + 1) * BLOCK_SIZE) - 1;
+
+        if (startingByte <= byteLowerBound && finalByte >= byteUpperBound){
+            // We want to read in this whole block. Read it in and then move to the next if statement cycle.
+
+        }
+
+       if (startingByte >= byteLowerBound && startingByte <= byteUpperBound && finalByte >= byteLowerBound && finalByte <= byteUpperBound){
+           // The START and END of the data we want is contained in this block.
+
+           uint8_t *empty_buffer = (uint8_t*)calloc(BLOCK_SIZE, sizeof(uint8_t));
+           FAILABLE(block_read(data_index, empty_buffer));
+           int startPoint = startingByte - byteLowerBound;
+           memcpy(buffer, empty_buffer + startpoint, count);
+
+           // read from the starting byte to the ending byte via a bounce buffer
+       }
+        if (startingByte >= byteLowerBound && startingByte <= byteUpperBound){
+          // The start of the data we want is contained in this block.
+
+          // Read from the starting byte to the end of this block (byteUpperBound) via a bounce buffer.
+        }
+        if (finalByte >= byteLowerBound && finalByte <= byteUpperBound){
+           // The end of the data we want is contained in this block.
+
+           // read from the byteLowerBound to the final byte in this block via a bounce buffer.
+        } else {
+            // No data we care about is contained in this block. Proceed
+        }
+
+        data_index = *fat_entry_at_index(data_index);
+        blocksIteratedOver++;
+   }
+
+    free(empty_buffer);
+
 	return -1;
 }
 
