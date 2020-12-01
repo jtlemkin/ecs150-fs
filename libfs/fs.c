@@ -412,21 +412,7 @@ int fs_write(int fd, void *buf, size_t count)
 
 int fs_read(int fd, void *buf, size_t count)
 {
-	/* TODO: Phase 4 */
-
-   /* uint32_t fileSize = root_dir->entries[fd_table[fd].file_i].fsize; // The size of the file we want to access.
-    uint16_t firstBlockIndex = root_dir->entries[fd_table[fd].file_i].first_block_i;
-    size_t startingOffset = fd_table[fd].offset;
-
-    for (int i = 0; i < num_fat*)
-
-    if (startingOffset + count >= BLOCK_SIZE){
-
-    }
-
-
-*/
-   // uint8_t *empty_buffer = (uint8_t*)calloc(BLOCK_SIZE, sizeof(uint8_t));
+	// TODO: check fd
 
    int data_index = root_dir->entries[fd_table[fd].file_i].first_block_i;
 
@@ -476,47 +462,12 @@ int fs_read(int fd, void *buf, size_t count)
 			}
 		}
 
-        /*if (startingByte <= blockLowerBound && finalByte >= blockUpperBound) {
-            // We want to read in this whole block. Read it in and then move to the next if statement cycle.
-
-            FAILABLE(block_read(data_index, buf+bytesWrittenOffset));
-            bytesWrittenOffset += BLOCK_SIZE;
-			
-        } else if (startingByte >= blockLowerBound && startingByte <= blockUpperBound && finalByte >= blockLowerBound && finalByte <= blockUpperBound){
-           // The START and END of the data we want is contained in this block.
-           FAILABLE(block_read(data_index, bounce_buffer));
-           int startPoint = startingByte - blockLowerBound;
-           memcpy(buf, bounce_buffer + startPoint, count);
-           break;
-
-           // read from the starting byte to the ending byte via a bounce buffer
-       	} else if (startingByte >= blockLowerBound && startingByte <= blockUpperBound){
-          // The start of the data we want is contained in this block.
-
-            FAILABLE(block_read(data_index, bounce_buffer));
-            int startPoint = startingByte - blockLowerBound;
-            memcpy(buf, bounce_buffer + startPoint, BLOCK_SIZE-startingByte);
-            bytesWrittenOffset += BLOCK_SIZE-startingByte;
-
-          // Read from the starting byte to the end of this block (blockUpperBound) via a bounce buffer.
-        } else if (finalByte >= blockLowerBound && finalByte <= blockUpperBound){
-           // The end of the data we want is contained in this block.
-
-            FAILABLE(block_read(data_index, bounce_buffer));
-            int startPoint = startingByte - blockLowerBound;
-            memcpy(buf+bytesWrittenOffset, bounce_buffer, finalByte-blockLowerBound);
-            break;
-           // read from the blockLowerBound to the final byte in this block via a bounce buffer.
-        } else {
-            // No data we care about is contained in this block. Proceed
-        }*/
-
         data_index = *fat_entry_at_index(data_index);
         blocksIteratedOver++;
    }
 
     free(bounce_buffer);
 
-	return -1;
+	return bytesWrittenOffset;
 }
 
