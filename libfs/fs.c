@@ -147,9 +147,20 @@ int fs_mount(const char *diskname)
 	return 0;
 }
 
+void fs_backup() {
+	int i = 1;
+
+	for (i = 0; i < superblock->num_fat; i++) {
+		block_write(1 + i, fat + i);
+	}
+
+	block_write(superblock->num_fat + 1, root_dir);
+}
+
 int fs_umount(void)
 {
-	// TODO: save edits
+	fs_backup();
+
 	free(fat);
 	fat = NULL;
 
@@ -231,27 +242,13 @@ void create_file(const char *filename, int index) {
 	root_dir->entries[index].first_block_i = FAT_EOC;
 }
 
-void fs_backup() {
-	int i = 1;
-
-	for (i = 0; i < superblock->num_fat; i++) {
-		block_write(1 + i, fat + i);
-	}
-
-	block_write(superblock->num_fat + 1, root_dir);
-}
-
 int fs_create(const char *filename)
 {
+	// TODO: Make sure name not too long
+
 	size_t file_index = new_file_index(filename);
 	if (file_index == -1) {
 		fprintf(stderr, "Error creating file: file name not unique\n");
-		return -1;
-	}
-
-	int fat_i = first_free_fat_index();
-	if (fat_i == -1) {
-		fprintf(stderr, "Error creating file: no space in fat\n");
 		return -1;
 	}
 
@@ -275,8 +272,9 @@ void clear_blocks(struct file_entry *file) {
 
 	while (data_index != FAT_EOC) {
 		block_write(data_index, empty_buffer);
+		int old_index = data_index;
 		data_index = *fat_entry_at_index(data_index);
-		*fat_entry_at_index(data_index) = 0;
+		*fat_entry_at_index(old_index) = 0;
 	}
 
 	free(empty_buffer);
@@ -286,8 +284,16 @@ void clear_blocks(struct file_entry *file) {
 
 int fs_delete(const char *filename)
 {
-	// TODO Phase 3 check to see if file is open
+	int i;
+
 	int file_index = first_index_of_filename(filename);
+
+	// Check to see if file is open
+	for (i = 0; i < FS_OPEN_MAX_COUNT; i++) {
+		if (fd_table[i].file_i == file_index) {
+			return -1;
+		}
+	}
 
 	//fs_ls();
 
@@ -407,9 +413,17 @@ int fs_lseek(int fd, size_t offset)
 
 int fs_write(int fd, void *buf, size_t count)
 {
-	/* TODO: Phase 4 */
+	if (fd < 0 || fd > 31) {
+		fprintf(stderr, "Unable to write: fd out of bounds\n");
+		return -1;
+	}
 
-    uint16_t data_index = root_dir->entries[fd_table[fd].file_i].first_block_i;
+	if (fd_table[fd].file_i == -1) {
+		fprintf(stderr, "Unable to write: file not open\n");
+		return -1;
+	}
+
+    uint16_t *data_index_ptr = &(root_dir->entries[fd_table[fd].file_i].first_block_i);
 
     int startingByte = fd_table[fd].offset;
     int finalByte = startingByte + count - 1;
@@ -417,8 +431,26 @@ int fs_write(int fd, void *buf, size_t count)
     uint8_t *bounce_buffer = (uint8_t*)calloc(BLOCK_SIZE, sizeof(uint8_t));
 
     int blocksIteratedOver = 0;
-    int bytesWrittenOffset = 0;
-    while (data_index != FAT_EOC) {
+    int total_bytes_written = 0;
+	bool newBlocksCreated = false;
+    while (total_bytes_written < count) {
+		// Allocate block if we are out of room
+		if (*data_index_ptr == FAT_EOC){
+            // now we allocate new space, and then update the data index to point to the new space.
+			int new_index = first_free_fat_index();
+
+			// Check to see if out of space
+			if (new_index == -1) {
+				fprintf(stderr, "Disk space unavailable\n");
+				break;
+			}
+
+			newBlocksCreated = true;
+
+			*data_index_ptr = new_index;
+			*fat_entry_at_index(new_index) = FAT_EOC;
+        }
+
         int blockLowerBound = blocksIteratedOver * BLOCK_SIZE;
         int blockUpperBound = ((blocksIteratedOver + 1) * BLOCK_SIZE) - 1;
 
@@ -441,20 +473,38 @@ int fs_write(int fd, void *buf, size_t count)
                 end_write = BLOCK_SIZE - 1;
             }
 
+			int block_bytes_written = end_write - start_write + 1;
+
+			// Debug
+			//fwrite(buf + total_bytes_written, 1, block_bytes_written, stdout);
+			//fflush(stdout);
+			//printf("\n");
+
+			// TODO: Change block_read and block_write calls to access correct
+			// data blocks
+
             if (start_write == 0 && end_write == BLOCK_SIZE - 1) {
                 // Perfect case
-                FAILABLE(block_write(data_index, buf + bytesWrittenOffset));
+                FAILABLE(block_write(*data_index_ptr, buf + total_bytes_written));
             } else {
                 // We're don't need the whole block so we use a bounce buffer
-                FAILABLE(block_read(data_index, bounce_buffer));
-                memcpy(bounce_buffer + start_write, buf + bytesWrittenOffset, (end_write - start_write + 1));
-                FAILABLE(block_write(data_index, bounce_buffer));
+                FAILABLE(block_read(*data_index_ptr, bounce_buffer));
+                memcpy(bounce_buffer + start_write, buf + total_bytes_written, block_bytes_written);
+				fwrite(bounce_buffer + start_write, 1, block_bytes_written, stdout);
+				fflush(stdout);
+				printf("\n");
+                FAILABLE(block_write(*data_index_ptr, bounce_buffer));
             }
 
-            bytesWrittenOffset += end_write - start_write + 1;
+			if (newBlocksCreated) {
+				printf("Writing bytes %d\n", block_bytes_written);
+				root_dir->entries[fd_table[fd].file_i].fsize += block_bytes_written;
+			}
+
+            total_bytes_written += block_bytes_written;
 
             /*
-            if (bytesWrittenOffset >= count){ // If we have done the correct amount of writing, we terminate.
+            if (total_bytes_written >= count){ // If we have done the correct amount of writing, we terminate.
                 break;
             }
             */
@@ -463,31 +513,30 @@ int fs_write(int fd, void *buf, size_t count)
             }
         }
 
-        data_index = *fat_entry_at_index(data_index);
+        data_index_ptr = fat_entry_at_index(*data_index_ptr);
         blocksIteratedOver++;
-
-        if (data_index == FAT_EOC){
-            // now we allocate new space, and then update the data index to point to the new space.
-            data_index = first_free_fat_index();
-        }
-
-
-
-
     }
 
     free(bounce_buffer);
 
+	fs_backup();
 
-
-	return -1;
+	return total_bytes_written;
 }
 
 int fs_read(int fd, void *buf, size_t count)
 {
-	// TODO: check fd
+	if (fd < 0 || fd > 31) {
+		fprintf(stderr, "Unable to read: fd out of bounds\n");
+		return -1;
+	}
 
-   uint_16t data_index = root_dir->entries[fd_table[fd].file_i].first_block_i;
+	if (fd_table[fd].file_i == -1) {
+		fprintf(stderr, "Unable to read: file not open\n");
+		return -1;
+	}
+
+   uint16_t data_index = root_dir->entries[fd_table[fd].file_i].first_block_i;
 
    int startingByte = fd_table[fd].offset;
    int finalByte = startingByte + count - 1;
@@ -495,7 +544,7 @@ int fs_read(int fd, void *buf, size_t count)
    uint8_t *bounce_buffer = (uint8_t*)calloc(BLOCK_SIZE, sizeof(uint8_t));
 
    int blocksIteratedOver = 0;
-   int bytesWrittenOffset = 0;
+   int total_bytes_written = 0;
    while (data_index != FAT_EOC) {
         int blockLowerBound = blocksIteratedOver * BLOCK_SIZE;
         int blockUpperBound = ((blocksIteratedOver + 1) * BLOCK_SIZE) - 1;
@@ -519,16 +568,20 @@ int fs_read(int fd, void *buf, size_t count)
 				end_read = BLOCK_SIZE - 1;
 			}
 
+			/*fwrite(buf + total_bytes_written, 1, block_bytes_written, stdout);
+			fflush(stdout);
+			printf("\n");*/
+
 			if (start_read == 0 && end_read == BLOCK_SIZE - 1) {
 				// Perfect case
-                FAILABLE(block_read(data_index, buf + bytesWrittenOffset));
+                FAILABLE(block_read(data_index, buf + total_bytes_written));
 			} else {
 				// We're don't need the whole block so we use a bounce buffer
 				FAILABLE(block_read(data_index, bounce_buffer));
-				memcpy(buf + bytesWrittenOffset, bounce_buffer + start_read, end_read - start_read + 1);
+				memcpy(buf + total_bytes_written, bounce_buffer + start_read, end_read - start_read + 1);
 			}
 
-			bytesWrittenOffset += end_read - start_read + 1;
+			total_bytes_written += end_read - start_read + 1;
 
 			if (blockUpperBound > finalByte) {
 				break;
@@ -541,6 +594,6 @@ int fs_read(int fd, void *buf, size_t count)
 
     free(bounce_buffer);
 
-	return bytesWrittenOffset;
+	return total_bytes_written;
 }
 
