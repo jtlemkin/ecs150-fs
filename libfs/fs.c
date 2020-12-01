@@ -193,6 +193,7 @@ int first_free_fat_index() {
 	return -1;
 }
 
+
 // Returns -1 if filename already in root_dir
 int new_file_index(const char* filename) {
 	int i;
@@ -407,6 +408,76 @@ int fs_lseek(int fd, size_t offset)
 int fs_write(int fd, void *buf, size_t count)
 {
 	/* TODO: Phase 4 */
+
+    uint16_t data_index = root_dir->entries[fd_table[fd].file_i].first_block_i;
+
+    int startingByte = fd_table[fd].offset;
+    int finalByte = startingByte + count - 1;
+
+    uint8_t *bounce_buffer = (uint8_t*)calloc(BLOCK_SIZE, sizeof(uint8_t));
+
+    int blocksIteratedOver = 0;
+    int bytesWrittenOffset = 0;
+    while (data_index != FAT_EOC) {
+        int blockLowerBound = blocksIteratedOver * BLOCK_SIZE;
+        int blockUpperBound = ((blocksIteratedOver + 1) * BLOCK_SIZE) - 1;
+
+        // If byte upper bound is greater than starting byte, we know that
+        // this block intersects with the bytes that we are trying to read
+        if (blockUpperBound >= startingByte) {
+            int start_write, end_write;
+
+            if (blockLowerBound < startingByte) {
+                // The start of the section to read is in the middle of the block
+                start_write = startingByte - blockLowerBound;
+            } else {
+                start_write = 0;
+            }
+
+            if (blockUpperBound > finalByte) {
+                // The end of the section to read is in the middle of the block
+                end_write = finalByte - blockLowerBound;
+            } else {
+                end_write = BLOCK_SIZE - 1;
+            }
+
+            if (start_write == 0 && end_write == BLOCK_SIZE - 1) {
+                // Perfect case
+                FAILABLE(block_write(data_index, buf + bytesWrittenOffset));
+            } else {
+                // We're don't need the whole block so we use a bounce buffer
+                FAILABLE(block_read(data_index, bounce_buffer));
+                memcpy(bounce_buffer + start_write, buf + bytesWrittenOffset, (end_write - start_write + 1));
+                FAILABLE(block_write(data_index, bounce_buffer));
+            }
+
+            bytesWrittenOffset += end_write - start_write + 1;
+
+            /*
+            if (bytesWrittenOffset >= count){ // If we have done the correct amount of writing, we terminate.
+                break;
+            }
+            */
+            if (blockUpperBound > finalByte) { // If we have done the correct amount of writing, we terminate.
+                break;
+            }
+        }
+
+        data_index = *fat_entry_at_index(data_index);
+        blocksIteratedOver++;
+
+        if (data_index == FAT_EOC){
+            // now we allocate new space, and then update the data index to point to the new space.
+            data_index = first_free_fat_index();
+        }
+
+
+    }
+
+    free(bounce_buffer);
+
+
+
 	return -1;
 }
 
@@ -414,7 +485,7 @@ int fs_read(int fd, void *buf, size_t count)
 {
 	// TODO: check fd
 
-   int data_index = root_dir->entries[fd_table[fd].file_i].first_block_i;
+   uint_16t data_index = root_dir->entries[fd_table[fd].file_i].first_block_i;
 
    int startingByte = fd_table[fd].offset;
    int finalByte = startingByte + count - 1;
@@ -448,11 +519,11 @@ int fs_read(int fd, void *buf, size_t count)
 
 			if (start_read == 0 && end_read == BLOCK_SIZE - 1) {
 				// Perfect case
-				memcpy(buf + bytesWrittenOffset, bounce_buffer + start_read, end_read - start_read);
+                FAILABLE(block_read(data_index, buf + bytesWrittenOffset));
 			} else {
 				// We're don't need the whole block so we use a bounce buffer
 				FAILABLE(block_read(data_index, bounce_buffer));
-				memcpy(buf + bytesWrittenOffset, bounce_buffer + start_read, end_read - start_read);
+				memcpy(buf + bytesWrittenOffset, bounce_buffer + start_read, end_read - start_read + 1);
 			}
 
 			bytesWrittenOffset += end_read - start_read + 1;
