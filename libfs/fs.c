@@ -483,17 +483,19 @@ int fs_write(int fd, void *buf, size_t count)
 			// TODO: Change block_read and block_write calls to access correct
 			// data blocks
 
+			printf("Index: %d\n", *data_index_ptr);
+
             if (start_write == 0 && end_write == BLOCK_SIZE - 1) {
                 // Perfect case
-                FAILABLE(block_write(*data_index_ptr, buf + total_bytes_written));
+                FAILABLE(block_write(superblock->num_fat + 1 + *data_index_ptr, buf + total_bytes_written));
             } else {
                 // We're don't need the whole block so we use a bounce buffer
-                FAILABLE(block_read(*data_index_ptr, bounce_buffer));
+                FAILABLE(block_read(superblock->num_fat + 1 + *data_index_ptr, bounce_buffer));
                 memcpy(bounce_buffer + start_write, buf + total_bytes_written, block_bytes_written);
-				fwrite(bounce_buffer + start_write, 1, block_bytes_written, stdout);
+				/*fwrite(bounce_buffer + start_write, 1, block_bytes_written, stdout);
 				fflush(stdout);
-				printf("\n");
-                FAILABLE(block_write(*data_index_ptr, bounce_buffer));
+				printf("\n");*/
+                FAILABLE(block_write(superblock->num_fat + 1 + *data_index_ptr, bounce_buffer));
             }
 
 			if (newBlocksCreated) {
@@ -544,7 +546,7 @@ int fs_read(int fd, void *buf, size_t count)
    uint8_t *bounce_buffer = (uint8_t*)calloc(BLOCK_SIZE, sizeof(uint8_t));
 
    int blocksIteratedOver = 0;
-   int total_bytes_written = 0;
+   int total_bytes_read = 0;
    while (data_index != FAT_EOC) {
         int blockLowerBound = blocksIteratedOver * BLOCK_SIZE;
         int blockUpperBound = ((blocksIteratedOver + 1) * BLOCK_SIZE) - 1;
@@ -568,20 +570,21 @@ int fs_read(int fd, void *buf, size_t count)
 				end_read = BLOCK_SIZE - 1;
 			}
 
-			/*fwrite(buf + total_bytes_written, 1, block_bytes_written, stdout);
-			fflush(stdout);
-			printf("\n");*/
-
 			if (start_read == 0 && end_read == BLOCK_SIZE - 1) {
 				// Perfect case
-                FAILABLE(block_read(data_index, buf + total_bytes_written));
+                FAILABLE(block_read(superblock->num_fat + 1 + data_index, buf + total_bytes_read));
 			} else {
 				// We're don't need the whole block so we use a bounce buffer
-				FAILABLE(block_read(data_index, bounce_buffer));
-				memcpy(buf + total_bytes_written, bounce_buffer + start_read, end_read - start_read + 1);
+				FAILABLE(block_read(superblock->num_fat + 1 + data_index, bounce_buffer));
+				memcpy(buf + total_bytes_read, bounce_buffer + start_read, end_read - start_read + 1);
+				printf("Starting print content\n");
+				fwrite(buf + total_bytes_read, 1, 19, stdout);
+				fflush(stdout);
+				printf("\n");
+				printf("End print content\n");
 			}
 
-			total_bytes_written += end_read - start_read + 1;
+			total_bytes_read += end_read - start_read + 1;
 
 			if (blockUpperBound > finalByte) {
 				break;
@@ -594,6 +597,6 @@ int fs_read(int fd, void *buf, size_t count)
 
     free(bounce_buffer);
 
-	return total_bytes_written;
+	return total_bytes_read;
 }
 
