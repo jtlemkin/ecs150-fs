@@ -177,32 +177,62 @@ int fs_umount(void)
 	return 0;
 }
 
+uint16_t* fat_entry_at_index(int index) {
+	int fat_index = index / FAT_SIZE;
+	int entry_index = index % FAT_SIZE;
+
+	return fat[fat_index].entries + entry_index;
+}
+
+int num_fat_free() {
+	int i, num_free;
+
+	num_free = 0;
+	for (i = 0; i < superblock->num_data; i++) {
+		if (*fat_entry_at_index(i) == 0) {
+			num_free += 1;
+		}
+	}
+
+	return num_free;
+}
+
+int num_files_free() {
+	int i, num_free;
+
+	num_free = 0;
+	for (i = 0; i < FS_FILE_MAX_COUNT; i++) {
+		if (root_dir->entries[i].fname[0] == '\0') {
+			num_free += 1;
+		}
+	}
+
+	return num_free;
+}
+
 int fs_info(void)
 {
 	if (!is_disk_opened()) {
 		return -1;
 	}
 
-	printf("Signature: ");
-	print_signature(superblock);
-	printf("Num blocks on disk: %" PRIu16 "\n", superblock->num_blocks_disk);
-	printf("Num data blocks: %" PRIu16 "\n", superblock->num_data);
-	printf("Num fat %" PRIu8 "\n", superblock->num_fat);
+	printf("FS Info:\n");
+	printf("total_blk_count=%d\n", superblock->num_blocks_disk);
+	printf("fat_blk_count=%d\n", superblock->num_fat);
+	printf("rdir_blk=%d\n", superblock->num_fat + 1);
+	printf("data_blk=%d\n", superblock->num_fat + 2);
+	printf("data_blk_count=%d\n", superblock->num_data);
+	printf("fat_free_ratio=%d/%d\n", num_fat_free(), superblock->num_data);
+	printf("rdir_free_ratio=%d/%d\n", num_files_free(), FS_FILE_MAX_COUNT);
 
 	return 0;
 }
 
 int first_free_fat_index() {
-	int i, j;
-
-	for (i = 0; i < superblock->num_fat; ++i) {
-		// It's important that we iterate less than num_data because it is 
-		// possible that we have more entries in a block than we actually have
-		// data blocks in our filesystem
-		for (j = 0; j < superblock->num_data; ++j) {
-			if (fat[i].entries[j] == 0) {
-				return i * FAT_SIZE + j;
-			}
+	int i = 0;
+	for (i = 0; i < superblock->num_data; ++i) {
+		if (*fat_entry_at_index(i) == 0) {
+			return i;
 		}
 	}
 
@@ -264,13 +294,6 @@ int fs_create(const char *filename)
 	return 0;
 }
 
-uint16_t* fat_entry_at_index(int index) {
-	int fat_index = index / FAT_SIZE;
-	int entry_index = index % FAT_SIZE;
-
-	return fat[fat_index].entries + entry_index;
-}
-
 void clear_blocks(struct file_entry *file) {
 	int data_index = file->first_block_i;
 
@@ -315,6 +338,7 @@ int fs_delete(const char *filename)
 
 	clear_blocks(root_dir->entries + file_index);
 
+	// Clear file entry
 	memset(root_dir->entries + file_index, 0, sizeof(struct file_entry));
 
 	fs_backup();
@@ -417,6 +441,9 @@ int fs_write(int fd, void *buf, size_t count)
     uint16_t *data_index_ptr = &(root_dir->entries[fd_table[fd].file_i].first_block_i);
 
     int startingByte = fd_table[fd].offset;
+
+	//printf("offset %d\n", startingByte);
+
     int finalByte = startingByte + count - 1;
 
     uint8_t *bounce_buffer = (uint8_t*)calloc(BLOCK_SIZE, sizeof(uint8_t));
@@ -527,6 +554,9 @@ int fs_write(int fd, void *buf, size_t count)
 
 	fs_backup();
 
+	// Increment offset in fd_table
+	fd_table[fd].offset += total_bytes_written;
+
 	return total_bytes_written;
 }
 
@@ -534,18 +564,18 @@ int fs_read(int fd, void *buf, size_t count)
 {
 	FAILABLE(verify_fd(fd));
 
-   uint16_t data_index = root_dir->entries[fd_table[fd].file_i].first_block_i;
+   	uint16_t data_index = root_dir->entries[fd_table[fd].file_i].first_block_i;
 
-   int startingByte = fd_table[fd].offset;
-   int finalByte = startingByte + count - 1;
+   	int startingByte = fd_table[fd].offset;
+	int finalByte = startingByte + count - 1;
 
-   uint8_t *bounce_buffer = (uint8_t*)calloc(BLOCK_SIZE, sizeof(uint8_t));
+	uint8_t *bounce_buffer = (uint8_t*)calloc(BLOCK_SIZE, sizeof(uint8_t));
 
-   int blocksIteratedOver = 0;
-   int total_bytes_read = 0;
-   while (data_index != FAT_EOC) {
-        int blockLowerBound = blocksIteratedOver * BLOCK_SIZE;
-        int blockUpperBound = ((blocksIteratedOver + 1) * BLOCK_SIZE) - 1;
+	int blocksIteratedOver = 0;
+	int total_bytes_read = 0;
+	while (data_index != FAT_EOC) {
+		int blockLowerBound = blocksIteratedOver * BLOCK_SIZE;
+		int blockUpperBound = ((blocksIteratedOver + 1) * BLOCK_SIZE) - 1;
 
 		// If byte upper bound is greater than starting byte, we know that
 		// this block intersects with the bytes that we are trying to read
@@ -568,7 +598,7 @@ int fs_read(int fd, void *buf, size_t count)
 
 			if (start_read == 0 && end_read == BLOCK_SIZE - 1) {
 				// Perfect case
-                FAILABLE(block_read(superblock->num_fat + 2 + data_index, buf + total_bytes_read));
+				FAILABLE(block_read(superblock->num_fat + 2 + data_index, buf + total_bytes_read));
 			} else {
 				// We're don't need the whole block so we use a bounce buffer
 				FAILABLE(block_read(superblock->num_fat + 2 + data_index, bounce_buffer));
@@ -587,11 +617,14 @@ int fs_read(int fd, void *buf, size_t count)
 			}
 		}
 
-        data_index = *fat_entry_at_index(data_index);
-        blocksIteratedOver++;
-   }
+		data_index = *fat_entry_at_index(data_index);
+		blocksIteratedOver++;
+	}
 
-    free(bounce_buffer);
+	free(bounce_buffer);
+
+	// Increment offset in fd_table
+	fd_table[fd].offset += total_bytes_read;
 
 	return total_bytes_read;
 }
