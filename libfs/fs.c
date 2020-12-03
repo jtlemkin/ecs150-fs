@@ -281,6 +281,11 @@ int fs_create(const char *filename)
 {
 	// TODO: Make sure name not too long
 
+	if (!is_disk_opened()) {
+		fprintf(stderr, "Disk not opened\n");
+		return -1;
+	}
+
 	size_t file_index = new_file_index(filename);
 	if (file_index == -1) {
 		fprintf(stderr, "Error creating file: file name not unique\n");
@@ -297,12 +302,12 @@ int fs_create(const char *filename)
 void clear_blocks(struct file_entry *file) {
 	int data_index = file->first_block_i;
 
-	printf("Data index clear blocks %d\n", data_index);
+	//printf("Data index clear blocks %d\n", data_index);
 
 	uint8_t *empty_buffer = (uint8_t*)calloc(BLOCK_SIZE, sizeof(uint8_t));
 
 	while (data_index != FAT_EOC) {
-		printf("Adjusted index %d\n", superblock->num_fat + 1 + data_index);
+		//printf("Adjusted index %d\n", superblock->num_fat + 1 + data_index);
 		block_write(superblock->num_fat + 2 + data_index, empty_buffer);
 		int old_index = data_index;
 		data_index = *fat_entry_at_index(data_index);
@@ -317,6 +322,11 @@ void clear_blocks(struct file_entry *file) {
 int fs_delete(const char *filename)
 {
 	int i;
+
+	if (!is_disk_opened()) {
+		fprintf(stderr, "Disk not opened\n");
+		return -1;
+	}
 
 	int file_index = first_index_of_filename(filename);
 
