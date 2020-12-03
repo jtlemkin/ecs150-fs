@@ -8,8 +8,8 @@ CLOSE
 CREATE	file_fs
 OPEN	file_fs
 WRITE	FILE	test_file_large
-SEEK	0
-READ	1000000	FILE	test_file_large
+SEEK	5
+READ	1000000	FILE	test_file_large_but_shorter
 CLOSE
 DELETE	file2
 CREATE	file3
@@ -18,6 +18,12 @@ WRITE	FILE	test_fs.c
 SEEK	0
 READ	1000000	FILE	test_fs.c
 CLOSE
+UMOUNT
+MOUNT
+OPEN	file3
+SEEK	0
+READ	1000000	FILE	test_fs.c
+CLOSE
 DELETE	file_fs
-DELETE file3
+DELETE	file3
 UMOUNT
