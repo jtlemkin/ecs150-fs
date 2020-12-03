@@ -474,6 +474,10 @@ int fs_lseek(int fd, size_t offset)
 {
 	FAILABLE(verify_fd(fd));
 
+	if (offset > root_dir->entries[fd_table[fd].file_i].fsize) {
+		return -1;
+	}
+
 	fd_table[fd].offset = offset;
 	
 	return 0;
