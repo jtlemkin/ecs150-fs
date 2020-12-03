@@ -539,16 +539,6 @@ int fs_write(int fd, void *buf, size_t count)
 				printf("\n");*/
             }
 
-            if (root_dir->entries[fd_table[fd].file_i].fsize < fd_table[fd].offset + block_bytes_written){
-                root_dir->entries[fd_table[fd].file_i].fsize += block_bytes_written - fd_table[fd].offset;
-            }
-/*
-			if (newBlocksCreated) {
-				//printf("Writing bytes %d\n", block_bytes_written);
-				root_dir->entries[fd_table[fd].file_i].fsize += block_bytes_written;
-			}
-			*/
-
             total_bytes_written += block_bytes_written;
 
             /*
@@ -571,6 +561,9 @@ int fs_write(int fd, void *buf, size_t count)
 
 	// Increment offset in fd_table
 	fd_table[fd].offset += total_bytes_written;
+	if (startingByte + total_bytes_written > root_dir->entries[fd_table[fd].file_i].fsize) {
+		root_dir->entries[fd_table[fd].file_i].fsize = startingByte + total_bytes_written;
+	}
 
 	return total_bytes_written;
 }
