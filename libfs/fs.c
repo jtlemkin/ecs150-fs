@@ -460,7 +460,7 @@ int fs_write(int fd, void *buf, size_t count)
 
     int blocksIteratedOver = 0;
     int total_bytes_written = 0;
-	bool newBlocksCreated = false;
+	//bool newBlocksCreated = false;
     while (total_bytes_written < count) {
 		// Allocate block if we are out of room
 		if (*data_index_ptr == FAT_EOC){
@@ -475,7 +475,7 @@ int fs_write(int fd, void *buf, size_t count)
 				break;
 			}
 
-			newBlocksCreated = true;
+			//newBlocksCreated = true;
 
 			*data_index_ptr = new_index;
 			*fat_entry_at_index(new_index) = FAT_EOC;
@@ -539,11 +539,6 @@ int fs_write(int fd, void *buf, size_t count)
 				printf("\n");*/
             }
 
-			if (newBlocksCreated) {
-				//printf("Writing bytes %d\n", block_bytes_written);
-				root_dir->entries[fd_table[fd].file_i].fsize += block_bytes_written;
-			}
-
             total_bytes_written += block_bytes_written;
 
             /*
@@ -566,6 +561,9 @@ int fs_write(int fd, void *buf, size_t count)
 
 	// Increment offset in fd_table
 	fd_table[fd].offset += total_bytes_written;
+	if (startingByte + total_bytes_written > root_dir->entries[fd_table[fd].file_i].fsize) {
+		root_dir->entries[fd_table[fd].file_i].fsize = startingByte + total_bytes_written;
+	}
 
 	return total_bytes_written;
 }
