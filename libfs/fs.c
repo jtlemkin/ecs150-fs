@@ -566,21 +566,29 @@ int fs_read(int fd, void *buf, size_t count)
 
    	uint16_t data_index = root_dir->entries[fd_table[fd].file_i].first_block_i;
 
-   	int startingByte = fd_table[fd].offset;
-	int finalByte = startingByte + count - 1;
+    uint32_t startingByte = fd_table[fd].offset;
+    uint32_t finalByte = startingByte + count - 1;
+
+    printf("Final byte: %" PRIu32 "\n",finalByte);
+
+
+	if (finalByte > root_dir->entries[fd_table[fd].file_i].fsize - 1) {
+        finalByte = root_dir->entries[fd_table[fd].file_i].fsize - 1;
+        printf("Final byte, capped: %" PRIu32 "\n",finalByte);
+    }
 
 	uint8_t *bounce_buffer = (uint8_t*)calloc(BLOCK_SIZE, sizeof(uint8_t));
 
-	int blocksIteratedOver = 0;
-	int total_bytes_read = 0;
+    uint32_t blocksIteratedOver = 0;
+    uint32_t total_bytes_read = 0;
 	while (data_index != FAT_EOC) {
-		int blockLowerBound = blocksIteratedOver * BLOCK_SIZE;
-		int blockUpperBound = ((blocksIteratedOver + 1) * BLOCK_SIZE) - 1;
+        uint32_t blockLowerBound = blocksIteratedOver * BLOCK_SIZE;
+        uint32_t blockUpperBound = ((blocksIteratedOver + 1) * BLOCK_SIZE) - 1;
 
 		// If byte upper bound is greater than starting byte, we know that
 		// this block intersects with the bytes that we are trying to read
 		if (blockUpperBound >= startingByte) {
-			int start_read, end_read;
+            int start_read, end_read;
 
 			if (blockLowerBound < startingByte) {
 				// The start of the section to read is in the middle of the block
