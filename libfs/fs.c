@@ -279,7 +279,6 @@ void create_file(const char *filename, int index) {
 
 int fs_create(const char *filename)
 {
-	// TODO: Make sure name not too long
 
 	if (!is_disk_opened()) {
 		fprintf(stderr, "Disk not opened\n");
@@ -290,6 +289,12 @@ int fs_create(const char *filename)
 	if (file_index == -1) {
 		fprintf(stderr, "Error creating file: file name not unique\n");
 		return -1;
+	}
+
+	// Error message for having a file name that is too long. Untested
+	if (strlen(filename) >= FS_FILENAME_LEN){
+        fprintf(stderr, "Error creating file: file name too long\n");
+        return -1;
 	}
 
 	create_file(filename, file_index);
