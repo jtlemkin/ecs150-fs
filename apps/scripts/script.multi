@@ -1,0 +1,23 @@
+MOUNT
+CREATE	file2
+OPEN	file2
+WRITE	FILE	Makefile
+SEEK	0
+READ	1000000	FILE	Makefile
+CLOSE
+CREATE	file_fs
+OPEN	file_fs
+WRITE	FILE	test_file_large
+SEEK	0
+READ	1000000	FILE	test_file_large
+CLOSE
+DELETE	file2
+CREATE	file3
+OPEN	file3
+WRITE	FILE	test_fs.c
+SEEK	0
+READ	1000000	FILE	test_fs.c
+CLOSE
+DELETE	file_fs
+DELETE file3
+UMOUNT

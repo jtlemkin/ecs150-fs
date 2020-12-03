@@ -1,0 +1,9 @@
+MOUNT
+CREATE	file_fs
+OPEN	file_fs
+WRITE	FILE	test_file_large
+SEEK	0
+READ	1	FILE	test_file_large
+CLOSE
+DELETE	file_fs
+UMOUNT

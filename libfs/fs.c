@@ -159,8 +159,28 @@ void fs_backup() {
 	block_write(superblock->num_fat + 1, root_dir);
 }
 
+bool is_fd_table_empty() {
+	int i;
+	for (i = 0; i < FS_OPEN_MAX_COUNT; ++i) {
+		if (fd_table[i].file_i != -1) {
+			return false;
+		}
+	}
+	return true;
+}
+
 int fs_umount(void)
 {
+	if (!is_disk_opened()) {
+		fprintf(stderr, "Cannot unmount, disk not open\n");
+		return -1;
+	}
+
+	if (!is_fd_table_empty()) {
+		fprintf(stderr, "Cannot unmount, file table not empty\n");
+		return -1;
+	}
+
 	fs_backup();
 
 	free(fat);
@@ -288,7 +308,7 @@ int fs_create(const char *filename)
 
 	size_t file_index = new_file_index(filename);
 	if (file_index == -1) {
-		fprintf(stderr, "Error creating file: file name not unique\n");
+		fprintf(stderr, "Error creating file: %s not unique\n", filename);
 		return -1;
 	}
 
@@ -329,10 +349,18 @@ int fs_delete(const char *filename)
 	}
 
 	int file_index = first_index_of_filename(filename);
+	if (file_index == -1) {
+		fprintf(stderr, "Unable to find file to delete\n");
+		return -1;
+	}
+
+	printf("file_index %d\n", file_index);
 
 	// Check to see if file is open
 	for (i = 0; i < FS_OPEN_MAX_COUNT; i++) {
 		if (fd_table[i].file_i == file_index) {
+			printf("file_i %d\n", fd_table[i].file_i);
+			fprintf(stderr, "Unable to delete open file\n");
 			return -1;
 		}
 	}
@@ -421,9 +449,13 @@ int verify_fd(int fd) {
 
 int fs_close(int fd)
 {
+	//fprintf(stderr, "start close\n");
 	FAILABLE(verify_fd(fd));
+	//printf("close fd verified\n");
 
+	//printf("close before %d\n", fd_table[fd].file_i);
 	fd_table[fd].file_i = -1;
+	//printf("close after %d\n", fd_table[fd].file_i);
 
 	return 0;
 }
@@ -590,6 +622,8 @@ int fs_read(int fd, void *buf, size_t count)
     uint32_t blocksIteratedOver = 0;
     uint32_t total_bytes_read = 0;
 	while (data_index != FAT_EOC) {
+		printf("Read data block index %d\n", data_index);
+
         uint32_t blockLowerBound = blocksIteratedOver * BLOCK_SIZE;
         uint32_t blockUpperBound = ((blocksIteratedOver + 1) * BLOCK_SIZE) - 1;
 
