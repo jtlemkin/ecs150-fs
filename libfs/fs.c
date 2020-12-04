@@ -13,7 +13,7 @@
 #define FAT_SIZE 2048
 
 
-#if 1
+#if 0
 #define fs_print(fmt, ...) \
 fprintf(stderr, "%s: "fmt"\n", __func__, ##__VA_ARGS__)
 #else
@@ -22,7 +22,7 @@ fprintf(stderr, "%s: "fmt"\n", __func__, ##__VA_ARGS__)
 
 // The FAILABLE macro propogates a subfunctions failure to the calling function
 
-#if 1
+#if 0
 #define FAILABLE(result)						\
 do {											\
 	if (result == -1) { 						\
@@ -211,8 +211,9 @@ uint16_t* fat_entry_at_index(int index) {
 	return fat[fat_index].entries + entry_index;
 }
 
-int num_fat_free() {
-	int i, num_free;
+uint8_t num_fat_free() {
+	int i;
+    uint8_t num_free;
 
 	num_free = 0;
 	for (i = 0; i < superblock->num_data; i++) {
@@ -244,12 +245,12 @@ int fs_info(void)
 	}
 
 	printf("FS Info:\n");
-	printf("total_blk_count=%d\n", superblock->num_blocks_disk);
-	printf("fat_blk_count=%d\n", superblock->num_fat);
-	printf("rdir_blk=%d\n", superblock->num_fat + 1);
-	printf("data_blk=%d\n", superblock->num_fat + 2);
-	printf("data_blk_count=%d\n", superblock->num_data);
-	printf("fat_free_ratio=%d/%d\n", num_fat_free(), superblock->num_data);
+	printf("total_blk_count=%" PRIu16 "\n", superblock->num_blocks_disk);
+	printf("fat_blk_count=%" PRIu8 "\n", superblock->num_fat);
+	printf("rdir_blk=%" PRIu16 "\n", superblock->num_fat + 1);
+	printf("data_blk=%" PRIu16 "\n", superblock->num_fat + 2);
+	printf("data_blk_count=%" PRIu16 "\n", superblock->num_data);
+	printf("fat_free_ratio=%" PRIu8 "/%" PRIu8 "\n", num_fat_free(), superblock->num_data);
 	printf("rdir_free_ratio=%d/%d\n", num_files_free(), FS_FILE_MAX_COUNT);
 
 	return 0;
@@ -393,10 +394,11 @@ int fs_ls(void)
 		return -1;
 	}
 
+    printf("FS Ls:\n");
 	for (i = 0; i < FS_FILE_MAX_COUNT; i++) {
 		entry = root_dir->entries[i];
 		if (entry.fname[0] != '\0') {
-			printf("%s %d bytes\n", entry.fname, entry.fsize);
+			printf("file: %s, size: %" PRIu32 ", data_blk: %" PRIu16 "\n", entry.fname, entry.fsize, entry.first_block_i);
 		}
 	}
 	return 0;
@@ -573,7 +575,6 @@ int fs_read(int fd, void *buf, size_t count)
 
 	if (finalByte > root_dir->entries[fd_table[fd].file_i].fsize - 1) {
         finalByte = root_dir->entries[fd_table[fd].file_i].fsize - 1;
-        //printf("Final byte, capped: %" PRIu32 "\n",finalByte);
     }
 
 	uint8_t *bounce_buffer = (uint8_t*)calloc(BLOCK_SIZE, sizeof(uint8_t));
