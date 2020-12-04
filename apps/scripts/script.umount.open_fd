@@ -1,0 +1,4 @@
+MOUNT
+CREATE	test
+OPEN	test
+UMOUNT

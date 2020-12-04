@@ -13,7 +13,7 @@
 #define FAT_SIZE 2048
 
 
-#if 0
+#if 1
 #define fs_print(fmt, ...) \
 fprintf(stderr, "%s: "fmt"\n", __func__, ##__VA_ARGS__)
 #else
@@ -24,7 +24,7 @@ fprintf(stderr, "%s: "fmt"\n", __func__, ##__VA_ARGS__)
 
 // The FAILABLE macro propogates a subfunctions failure to the calling function
 
-#if 0
+#if 1
 #define FAILABLE(result)						\
 do {											\
 	if (result == -1) { 						\
@@ -184,7 +184,6 @@ int fs_umount(void)
 {
 	if (!is_disk_opened()) {
         fs_print("Cannot unmount, disk not open\n");
-
 		return -1;
 	}
 
@@ -440,6 +439,7 @@ int fs_open(const char *filename)
 	int file_i = first_index_of_filename(filename);
 	if (file_i == -1) {
         fs_print("Unable to open file: file not found\n");
+		return -1;
 	}
 
 	fd_table[fd].file_i = file_i;
