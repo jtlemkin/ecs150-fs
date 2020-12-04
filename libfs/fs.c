@@ -78,16 +78,6 @@ struct fat_block *fat = NULL;
 struct root_dir *root_dir = NULL;
 struct fd_entry fd_table[FS_OPEN_MAX_COUNT];
 
-void print_signature(struct superblock *superblock) {
-	int i;
-
-	for (i = 0; i < 8; i++) {
-        fs_print("%c", superblock->signature[i]);
-	}
-
-    fs_print("\n");
-}
-
 bool is_valid_superblock(struct superblock *superblock) {
 	int i;
 
@@ -116,9 +106,7 @@ int superblock_read() {
 
 	FAILABLE(block_read(0, superblock));
 	if (!is_valid_superblock(superblock)) {
-        fs_print("Error reading superblock with signature: ");
-
-		print_signature(superblock);
+        fs_print("Error reading superblock with signature\n");
 		return -1;
 	}
 
@@ -333,7 +321,7 @@ int fs_create(const char *filename)
 		return -1;
 	}
 
-	size_t file_index = new_file_index(filename);
+	int file_index = new_file_index(filename);
 	if (file_index == -1) {
         fs_print("Error creating file: %s not unique\n", filename);
 		return -1;
@@ -513,24 +501,18 @@ int fs_write(int fd, void *buf, size_t count)
 
     uint16_t *data_index_ptr = &(root_dir->entries[fd_table[fd].file_i].first_block_i);
 
-    int startingByte = fd_table[fd].offset;
-
-	//printf("offset %d\n", startingByte);
-
-    int finalByte = startingByte + count - 1;
+    size_t startingByte = fd_table[fd].offset;
+    size_t finalByte = startingByte + count - 1;
 
     uint8_t *bounce_buffer = (uint8_t*)calloc(BLOCK_SIZE, sizeof(uint8_t));
 
     int blocksIteratedOver = 0;
-    int total_bytes_written = 0;
-	//bool newBlocksCreated = false;
+    size_t total_bytes_written = 0;
     while (total_bytes_written < count) {
 		// Allocate block if we are out of room
 		if (*data_index_ptr == FAT_EOC){
             // now we allocate new space, and then update the data index to point to the new space.
 			int new_index = first_free_fat_index();
-
-			//printf("FIRST FREE FAT: %d\n", new_index);
 
 			// Check to see if out of space
 			if (new_index == -1) {
@@ -538,16 +520,12 @@ int fs_write(int fd, void *buf, size_t count)
 				break;
 			}
 
-			//newBlocksCreated = true;
-
 			*data_index_ptr = new_index;
 			*fat_entry_at_index(new_index) = FAT_EOC;
-
-			//printf("Set fat entry at %d to EOC %d\n", new_index, *fat_entry_at_index(new_index));
         }
 
-        int blockLowerBound = blocksIteratedOver * BLOCK_SIZE;
-        int blockUpperBound = ((blocksIteratedOver + 1) * BLOCK_SIZE) - 1;
+        size_t blockLowerBound = blocksIteratedOver * BLOCK_SIZE;
+        size_t blockUpperBound = ((blocksIteratedOver + 1) * BLOCK_SIZE) - 1;
 
         // If byte upper bound is greater than starting byte, we know that
         // this block intersects with the bytes that we are trying to read
@@ -569,16 +547,6 @@ int fs_write(int fd, void *buf, size_t count)
             }
 
 			int block_bytes_written = end_write - start_write + 1;
-
-			// Debug
-			//fwrite(buf + total_bytes_written, 1, block_bytes_written, stdout);
-			//fflush(stdout);
-			//printf("\n");
-
-			// TODO: Change block_read and block_write calls to access correct
-			// data blocks
-
-			//printf("Index: %d, %d\n", *data_index_ptr, superblock->num_fat + 2 + *data_index_ptr);
 
             if (start_write == 0 && end_write == BLOCK_SIZE - 1) {
                 fs_print("Direct write\n");
@@ -641,8 +609,6 @@ int fs_read(int fd, void *buf, size_t count)
 
     uint32_t startingByte = fd_table[fd].offset;
     uint32_t finalByte = startingByte + count - 1;
-
-    //printf("Final byte: %" PRIu32 "\n",finalByte);
 
 
 	if (finalByte > root_dir->entries[fd_table[fd].file_i].fsize - 1) {
