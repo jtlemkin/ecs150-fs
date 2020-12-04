@@ -1,8 +1,0 @@
-*.fs
-*.d
-*.o
-*.x
-*.a
-core
-*.txt
-test*
