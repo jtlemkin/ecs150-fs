@@ -88,6 +88,14 @@ bool is_valid_superblock(struct superblock *superblock) {
 		}
 	}
 
+    int blocks = block_disk_count();
+	int superBlockDataBlocks = superblock->num_blocks_disk;
+
+    if (superBlockDataBlocks != blocks) {
+        fs_print("Block count mismatch \n");
+        return false;
+    }
+
 	return true;
 }
 
