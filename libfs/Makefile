@@ -7,9 +7,7 @@ objs := fs.o disk.o
 CC := gcc
 
 # General gcc options
-#CFLAGS	:= -Wall -Werror -Wextra
-CFLAGS	:= -Wall -Werror
-CFLAGS	+= -g
+CFLAGS	:= -Wall -Werror -Wextra
 
 ## Debug flag
 ifneq ($(D),1)
