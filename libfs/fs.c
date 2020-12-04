@@ -12,7 +12,19 @@
 #define FAT_EOC 0xFFFF
 #define FAT_SIZE 2048
 
+
+#if 0
+#define fs_print(fmt, ...) \
+fprintf(stderr, "%s: "fmt"\n", __func__, ##__VA_ARGS__)
+#else
+#define fs_print(...) do { } while(0)
+#endif
+// fs_print("The answer is %d\n", 42);
+
+
 // The FAILABLE macro propogates a subfunctions failure to the calling function
+
+#if 0
 #define FAILABLE(result)						\
 do {											\
 	if (result == -1) { 						\
@@ -20,6 +32,16 @@ do {											\
 		return -1;								\
 	} 											\
 } while(0)
+#else
+#define FAILABLE(result)						\
+do {											\
+	if (result == -1) { 						\
+		return -1;								\
+	} 											\
+} while(0)
+#endif
+
+
 
 struct __attribute__((__packed__)) superblock {
 	uint8_t signature[8];
@@ -60,10 +82,10 @@ void print_signature(struct superblock *superblock) {
 	int i;
 
 	for (i = 0; i < 8; i++) {
-		printf("%c", superblock->signature[i]);
+        fs_print("%c", superblock->signature[i]);
 	}
 
-	printf("\n");
+    fs_print("\n");
 }
 
 bool is_valid_superblock(struct superblock *superblock) {
@@ -88,13 +110,14 @@ bool is_disk_opened() {
 int superblock_read() {
 	superblock = (struct superblock*)malloc(sizeof(struct superblock));
 	if (!superblock) {
-		perror("fs_mount superblock: ");
+        fs_print("fs_mount superblock: ");
 		return -1;
 	}
 
 	FAILABLE(block_read(0, superblock));
 	if (!is_valid_superblock(superblock)) {
-		printf("Error reading superblock with signature: ");
+        fs_print("Error reading superblock with signature: ");
+
 		print_signature(superblock);
 		return -1;
 	}
@@ -107,7 +130,7 @@ int fat_read() {
 
 	fat = (struct fat_block*)malloc(superblock->num_fat * sizeof(struct fat_block));
 	if (!fat) {
-		perror("fs_mount fat array: ");
+        fs_print("fs_mount fat array: ");
 		return -1;
 	}
 	for (i = 0; i < superblock->num_fat; ++i) {
@@ -122,7 +145,7 @@ int fat_read() {
 int root_dir_read() {
 	root_dir = (struct root_dir*)malloc(sizeof(struct root_dir));
 	if (!root_dir) {
-		perror("fs_mount root_dir: ");
+        fs_print("fs_mount root_dir: ");
 		return -1;
 	}
 	FAILABLE(block_read(superblock->num_fat + 1, root_dir));
@@ -172,12 +195,13 @@ bool is_fd_table_empty() {
 int fs_umount(void)
 {
 	if (!is_disk_opened()) {
-		fprintf(stderr, "Cannot unmount, disk not open\n");
+        fs_print("Cannot unmount, disk not open\n");
+
 		return -1;
 	}
 
 	if (!is_fd_table_empty()) {
-		fprintf(stderr, "Cannot unmount, file table not empty\n");
+        fs_print("Cannot unmount, file table not empty\n");
 		return -1;
 	}
 
@@ -300,18 +324,18 @@ void create_file(const char *filename, int index) {
 int fs_create(const char *filename)
 {
 	if (strlen(filename) >= FS_FILENAME_LEN){
-        fprintf(stderr, "Error creating file: file name too long\n");
+        fs_print("Error creating file: file name too long\n");
         return -1;
     }
 
 	if (!is_disk_opened()) {
-		fprintf(stderr, "Disk not opened\n");
+        fs_print("Disk not opened\n");
 		return -1;
 	}
 
 	size_t file_index = new_file_index(filename);
 	if (file_index == -1) {
-		fprintf(stderr, "Error creating file: %s not unique\n", filename);
+        fs_print("Error creating file: %s not unique\n", filename);
 		return -1;
 	}
 
@@ -347,13 +371,13 @@ int fs_delete(const char *filename)
 	int i;
 
 	if (!is_disk_opened()) {
-		fprintf(stderr, "Disk not opened\n");
+        fs_print("Disk not opened\n");
 		return -1;
 	}
 
 	int file_index = first_index_of_filename(filename);
 	if (file_index == -1) {
-		fprintf(stderr, "Unable to find file to delete\n");
+        fs_print("Unable to find file to delete\n");
 		return -1;
 	}
 
@@ -362,8 +386,8 @@ int fs_delete(const char *filename)
 	// Check to see if file is open
 	for (i = 0; i < FS_OPEN_MAX_COUNT; i++) {
 		if (fd_table[i].file_i == file_index) {
-			printf("file_i %d\n", fd_table[i].file_i);
-			fprintf(stderr, "Unable to delete open file\n");
+            fs_print("file_i %d\n", fd_table[i].file_i);
+            fs_print("Unable to delete open file\n");
 			return -1;
 		}
 	}
@@ -371,7 +395,7 @@ int fs_delete(const char *filename)
 	//fs_ls();
 
 	if (file_index == -1) {
-		fprintf(stderr, "Unable to find file in file root directory\n");
+        fs_print("Unable to find file in file root directory\n");
 		return -1;
 	}
 
@@ -393,7 +417,7 @@ int fs_ls(void)
 	struct file_entry entry;
 
 	if (!is_disk_opened()) {
-		fprintf(stderr, "fs not opened\n");
+        fs_print("fs not opened\n");
 		return -1;
 	}
 
@@ -421,13 +445,13 @@ int fs_open(const char *filename)
 {
 	int fd = first_open_fd_i();
 	if (fd == -1) {
-		fprintf(stderr, "Unable to open file: max num files opened\n");
+        fs_print("Unable to open file: max num files opened\n");
 		return -1;
 	}
 
 	int file_i = first_index_of_filename(filename);
 	if (file_i == -1) {
-		fprintf(stderr, "Unable to open file: file not found\n");
+        fs_print("Unable to open file: file not found\n");
 	}
 
 	fd_table[fd].file_i = file_i;
@@ -438,12 +462,12 @@ int fs_open(const char *filename)
 
 int verify_fd(int fd) {
 	if (fd < 0 || fd > 31) {
-		fprintf(stderr, "fd out of bounds\n");
+        fs_print("fd out of bounds\n");
 		return -1;
 	}
 
 	if (fd_table[fd].file_i == -1) {
-		fprintf(stderr, "fd not open\n");
+        fs_print("fd not open\n");
 		return -1;
 	}
 
@@ -510,7 +534,7 @@ int fs_write(int fd, void *buf, size_t count)
 
 			// Check to see if out of space
 			if (new_index == -1) {
-				fprintf(stderr, "Disk space unavailable\n");
+                fs_print("Disk space unavailable\n");
 				break;
 			}
 
@@ -557,11 +581,11 @@ int fs_write(int fd, void *buf, size_t count)
 			//printf("Index: %d, %d\n", *data_index_ptr, superblock->num_fat + 2 + *data_index_ptr);
 
             if (start_write == 0 && end_write == BLOCK_SIZE - 1) {
-				printf("Direct write\n");
+                fs_print("Direct write\n");
                 // Perfect case
                 FAILABLE(block_write(superblock->num_fat + 2 + *data_index_ptr, buf + total_bytes_written));
             } else {
-				printf("Bounce write\n");
+                fs_print("Bounce write\n");
                 // We're don't need the whole block so we use a bounce buffer
                 FAILABLE(block_read(superblock->num_fat + 2 + *data_index_ptr, bounce_buffer));
 				/*fwrite(bounce_buffer + start_write, 1, block_bytes_written, stdout);
@@ -656,11 +680,11 @@ int fs_read(int fd, void *buf, size_t count)
 			}
 
 			if (start_read == 0 && end_read == BLOCK_SIZE - 1) {
-				printf("Direct read\n");
+                fs_print("Direct read\n");
 				// Perfect case
 				FAILABLE(block_read(superblock->num_fat + 2 + data_index, buf + total_bytes_read));
 			} else {
-				printf("Bounce read\n");
+                fs_print("Bounce read\n");
 				// We're don't need the whole block so we use a bounce buffer
 				FAILABLE(block_read(superblock->num_fat + 2 + data_index, bounce_buffer));
 				memcpy(buf + total_bytes_read, bounce_buffer + start_read, end_read - start_read + 1);
