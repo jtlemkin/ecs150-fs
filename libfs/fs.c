@@ -159,8 +159,28 @@ void fs_backup() {
 	block_write(superblock->num_fat + 1, root_dir);
 }
 
+bool is_fd_table_empty() {
+	int i;
+	for (i = 0; i < FS_OPEN_MAX_COUNT; ++i) {
+		if (fd_table[i].file_i != -1) {
+			return false;
+		}
+	}
+	return true;
+}
+
 int fs_umount(void)
 {
+	if (!is_disk_opened()) {
+		fprintf(stderr, "Cannot unmount, disk not open\n");
+		return -1;
+	}
+
+	if (!is_fd_table_empty()) {
+		fprintf(stderr, "Cannot unmount, file table not empty\n");
+		return -1;
+	}
+
 	fs_backup();
 
 	free(fat);
@@ -279,6 +299,10 @@ void create_file(const char *filename, int index) {
 
 int fs_create(const char *filename)
 {
+	if (strlen(filename) >= FS_FILENAME_LEN){
+        fprintf(stderr, "Error creating file: file name too long\n");
+        return -1;
+    }
 
 	if (!is_disk_opened()) {
 		fprintf(stderr, "Disk not opened\n");
@@ -287,14 +311,8 @@ int fs_create(const char *filename)
 
 	size_t file_index = new_file_index(filename);
 	if (file_index == -1) {
-		fprintf(stderr, "Error creating file: file name not unique\n");
+		fprintf(stderr, "Error creating file: %s not unique\n", filename);
 		return -1;
-	}
-
-	// Error message for having a file name that is too long. Untested
-	if (strlen(filename) >= FS_FILENAME_LEN){
-        fprintf(stderr, "Error creating file: file name too long\n");
-        return -1;
 	}
 
 	create_file(filename, file_index);
@@ -334,10 +352,18 @@ int fs_delete(const char *filename)
 	}
 
 	int file_index = first_index_of_filename(filename);
+	if (file_index == -1) {
+		fprintf(stderr, "Unable to find file to delete\n");
+		return -1;
+	}
+
+	//printf("file_index %d\n", file_index);
 
 	// Check to see if file is open
 	for (i = 0; i < FS_OPEN_MAX_COUNT; i++) {
 		if (fd_table[i].file_i == file_index) {
+			printf("file_i %d\n", fd_table[i].file_i);
+			fprintf(stderr, "Unable to delete open file\n");
 			return -1;
 		}
 	}
@@ -426,9 +452,13 @@ int verify_fd(int fd) {
 
 int fs_close(int fd)
 {
+	//fprintf(stderr, "start close\n");
 	FAILABLE(verify_fd(fd));
+	//printf("close fd verified\n");
 
+	//printf("close before %d\n", fd_table[fd].file_i);
 	fd_table[fd].file_i = -1;
+	//printf("close after %d\n", fd_table[fd].file_i);
 
 	return 0;
 }
@@ -443,6 +473,10 @@ int fs_stat(int fd)
 int fs_lseek(int fd, size_t offset)
 {
 	FAILABLE(verify_fd(fd));
+
+	if (offset > root_dir->entries[fd_table[fd].file_i].fsize) {
+		return -1;
+	}
 
 	fd_table[fd].offset = offset;
 	
@@ -523,9 +557,11 @@ int fs_write(int fd, void *buf, size_t count)
 			//printf("Index: %d, %d\n", *data_index_ptr, superblock->num_fat + 2 + *data_index_ptr);
 
             if (start_write == 0 && end_write == BLOCK_SIZE - 1) {
+				printf("Direct write\n");
                 // Perfect case
                 FAILABLE(block_write(superblock->num_fat + 2 + *data_index_ptr, buf + total_bytes_written));
             } else {
+				printf("Bounce write\n");
                 // We're don't need the whole block so we use a bounce buffer
                 FAILABLE(block_read(superblock->num_fat + 2 + *data_index_ptr, bounce_buffer));
 				/*fwrite(bounce_buffer + start_write, 1, block_bytes_written, stdout);
@@ -582,12 +618,12 @@ int fs_read(int fd, void *buf, size_t count)
     uint32_t startingByte = fd_table[fd].offset;
     uint32_t finalByte = startingByte + count - 1;
 
-    printf("Final byte: %" PRIu32 "\n",finalByte);
+    //printf("Final byte: %" PRIu32 "\n",finalByte);
 
 
 	if (finalByte > root_dir->entries[fd_table[fd].file_i].fsize - 1) {
         finalByte = root_dir->entries[fd_table[fd].file_i].fsize - 1;
-        printf("Final byte, capped: %" PRIu32 "\n",finalByte);
+        //printf("Final byte, capped: %" PRIu32 "\n",finalByte);
     }
 
 	uint8_t *bounce_buffer = (uint8_t*)calloc(BLOCK_SIZE, sizeof(uint8_t));
@@ -595,6 +631,8 @@ int fs_read(int fd, void *buf, size_t count)
     uint32_t blocksIteratedOver = 0;
     uint32_t total_bytes_read = 0;
 	while (data_index != FAT_EOC) {
+		//printf("Read data block index %d\n", data_index);
+
         uint32_t blockLowerBound = blocksIteratedOver * BLOCK_SIZE;
         uint32_t blockUpperBound = ((blocksIteratedOver + 1) * BLOCK_SIZE) - 1;
 
@@ -618,9 +656,11 @@ int fs_read(int fd, void *buf, size_t count)
 			}
 
 			if (start_read == 0 && end_read == BLOCK_SIZE - 1) {
+				printf("Direct read\n");
 				// Perfect case
 				FAILABLE(block_read(superblock->num_fat + 2 + data_index, buf + total_bytes_read));
 			} else {
+				printf("Bounce read\n");
 				// We're don't need the whole block so we use a bounce buffer
 				FAILABLE(block_read(superblock->num_fat + 2 + data_index, bounce_buffer));
 				memcpy(buf + total_bytes_read, bounce_buffer + start_read, end_read - start_read + 1);
