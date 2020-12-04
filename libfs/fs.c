@@ -19,8 +19,6 @@ fprintf(stderr, "%s: "fmt"\n", __func__, ##__VA_ARGS__)
 #else
 #define fs_print(...) do { } while(0)
 #endif
-// fs_print("The answer is %d\n", 42);
-
 
 // The FAILABLE macro propogates a subfunctions failure to the calling function
 
@@ -124,8 +122,6 @@ int fat_read() {
 	for (i = 0; i < superblock->num_fat; ++i) {
 		FAILABLE(block_read(1 + i, fat + i));
 	}
-
-	//printf("First fat entry %d\n", fat[0].entries[0]);
 
 	return 0;
 }
@@ -336,12 +332,9 @@ int fs_create(const char *filename)
 void clear_blocks(struct file_entry *file) {
 	int data_index = file->first_block_i;
 
-	//printf("Data index clear blocks %d\n", data_index);
-
 	uint8_t *empty_buffer = (uint8_t*)calloc(BLOCK_SIZE, sizeof(uint8_t));
 
 	while (data_index != FAT_EOC) {
-		//printf("Adjusted index %d\n", superblock->num_fat + 1 + data_index);
 		block_write(superblock->num_fat + 2 + data_index, empty_buffer);
 		int old_index = data_index;
 		data_index = *fat_entry_at_index(data_index);
@@ -350,8 +343,6 @@ void clear_blocks(struct file_entry *file) {
 
 	free(empty_buffer);
 }
-
-//int fs_ls(void);
 
 int fs_delete(const char *filename)
 {
@@ -368,8 +359,6 @@ int fs_delete(const char *filename)
 		return -1;
 	}
 
-	//printf("file_index %d\n", file_index);
-
 	// Check to see if file is open
 	for (i = 0; i < FS_OPEN_MAX_COUNT; i++) {
 		if (fd_table[i].file_i == file_index) {
@@ -379,14 +368,10 @@ int fs_delete(const char *filename)
 		}
 	}
 
-	//fs_ls();
-
 	if (file_index == -1) {
         fs_print("Unable to find file in file root directory\n");
 		return -1;
 	}
-
-	//printf("findex %d\n", file_index);
 
 	clear_blocks(root_dir->entries + file_index);
 
@@ -464,21 +449,14 @@ int verify_fd(int fd) {
 
 int fs_close(int fd)
 {
-	//fprintf(stderr, "start close\n");
 	FAILABLE(verify_fd(fd));
-	//printf("close fd verified\n");
-
-	//printf("close before %d\n", fd_table[fd].file_i);
 	fd_table[fd].file_i = -1;
-	//printf("close after %d\n", fd_table[fd].file_i);
-
 	return 0;
 }
 
 int fs_stat(int fd)
 {
 	FAILABLE(verify_fd(fd));
-
 	return root_dir->entries[fd_table[fd].file_i].fsize;
 }
 
@@ -556,29 +534,11 @@ int fs_write(int fd, void *buf, size_t count)
                 fs_print("Bounce write\n");
                 // We're don't need the whole block so we use a bounce buffer
                 FAILABLE(block_read(superblock->num_fat + 2 + *data_index_ptr, bounce_buffer));
-				/*fwrite(bounce_buffer + start_write, 1, block_bytes_written, stdout);
-				fflush(stdout);
-				printf("\n");*/
                 memcpy(bounce_buffer + start_write, buf + total_bytes_written, block_bytes_written);
-				/*fwrite(bounce_buffer + start_write, 1, block_bytes_written, stdout);
-				fflush(stdout);
-				printf("\n");*/
-
                 FAILABLE(block_write(superblock->num_fat + 2 + *data_index_ptr, bounce_buffer));
-
-				/*FAILABLE(block_read(superblock->num_fat + 1 + *data_index_ptr, bounce_buffer));
-				fwrite(bounce_buffer + start_write, 1, block_bytes_written, stdout);
-				fflush(stdout);
-				printf("\n");*/
             }
 
             total_bytes_written += block_bytes_written;
-
-            /*
-            if (total_bytes_written >= count){ // If we have done the correct amount of writing, we terminate.
-                break;
-            }
-            */
             if (blockUpperBound > finalByte) { // If we have done the correct amount of writing, we terminate.
                 break;
             }
@@ -607,8 +567,8 @@ int fs_read(int fd, void *buf, size_t count)
 
    	uint16_t data_index = root_dir->entries[fd_table[fd].file_i].first_block_i;
 
-    uint32_t startingByte = fd_table[fd].offset;
-    uint32_t finalByte = startingByte + count - 1;
+    size_t startingByte = fd_table[fd].offset;
+    size_t finalByte = startingByte + count - 1;
 
 
 	if (finalByte > root_dir->entries[fd_table[fd].file_i].fsize - 1) {
@@ -618,11 +578,9 @@ int fs_read(int fd, void *buf, size_t count)
 
 	uint8_t *bounce_buffer = (uint8_t*)calloc(BLOCK_SIZE, sizeof(uint8_t));
 
-    uint32_t blocksIteratedOver = 0;
-    uint32_t total_bytes_read = 0;
+    size_t blocksIteratedOver = 0;
+    size_t total_bytes_read = 0;
 	while (data_index != FAT_EOC) {
-		//printf("Read data block index %d\n", data_index);
-
         uint32_t blockLowerBound = blocksIteratedOver * BLOCK_SIZE;
         uint32_t blockUpperBound = ((blocksIteratedOver + 1) * BLOCK_SIZE) - 1;
 
@@ -654,11 +612,6 @@ int fs_read(int fd, void *buf, size_t count)
 				// We're don't need the whole block so we use a bounce buffer
 				FAILABLE(block_read(superblock->num_fat + 2 + data_index, bounce_buffer));
 				memcpy(buf + total_bytes_read, bounce_buffer + start_read, end_read - start_read + 1);
-				/*printf("Starting print content\n");
-				fwrite(buf + total_bytes_read, 1, 19, stdout);
-				fflush(stdout);
-				printf("\n");
-				printf("End print content\n");*/
 			}
 
 			total_bytes_read += end_read - start_read + 1;
@@ -679,4 +632,3 @@ int fs_read(int fd, void *buf, size_t count)
 
 	return total_bytes_read;
 }
-
